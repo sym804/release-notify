@@ -1,0 +1,16 @@
+# 릴리즈 노트에 새 버전 절이 push 되면 Slack 으로 알린다.
+# 로직은 sym804/release-notify 에 있다. 이 파일은 그 레포의 install.py 가 넣는다.
+# 릴리즈 노트 파일을 새로 만들거나 옮기면 install.py 를 다시 돌려 paths 를 갱신할 것.
+name: release-notify
+
+on:
+  push:
+    branches: [__BRANCH__]
+    paths:
+__PATHS__
+
+jobs:
+  notify:
+    uses: sym804/release-notify/.github/workflows/notify.yml@main
+    secrets:
+      webhook: ${{ secrets.SLACK_RELEASE_WEBHOOK }}

@@ -1,0 +1,42 @@
+# 공용 워크플로. 각 레포의 .github/workflows/release-notify.yml 이 부른다.
+# github 컨텍스트는 호출한 레포의 push 이벤트다(before/after 가 그 레포 기준).
+name: release-notify
+
+on:
+  workflow_call:
+    secrets:
+      webhook:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 호출한 레포 체크아웃
+        uses: actions/checkout@v4
+        with:
+          # before 커밋의 릴리즈 노트와 비교해야 해서 이력이 필요하다.
+          # blob:none 이라 이력은 받고 파일 내용은 필요할 때만 받는다(큰 레포 대비).
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: 알림 스크립트 체크아웃
+        uses: actions/checkout@v4
+        with:
+          repository: sym804/release-notify
+          ref: main
+          path: .release-notify
+
+      - name: 새 릴리즈 절 알림
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.webhook }}
+        run: >
+          python3 .release-notify/notify.py
+          --before "${{ github.event.before }}"
+          --after "${{ github.sha }}"
+          --repo "${{ github.repository }}"
+          --server "${{ github.server_url }}"
