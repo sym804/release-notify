@@ -369,3 +369,176 @@ def test_웹훅이_있으면_한_번_보낸다(repo, monkeypatch):
     monkeypatch.setattr(notify, "post", lambda url, text: sent.append(text))
     assert notify.main(["--before", base, "--after", head, "--repo", "sym804/x"]) == 0
     assert len(sent) == 1 and "0.2.0" in sent[0]
+
+
+# ── 코드 펜스 판정 (stockradar 6.18.2.0 절의 들여쓴 ~~~~ 밑줄) ─────────
+
+def test_들여쓴_물결_밑줄은_펜스가_아니다():
+    # 4칸 이상 들여쓴 ~~~~ 는 들여쓴 코드 블록 안의 글자다. 펜스로 읽으면 그 절 본문이 파일 끝까지 늘어난다
+    old = md(
+        "## 시스템 2.0.0 - [fix] 둘째 (2026-01-02)",
+        "- 감사 도구",
+        "",
+        "        abs(x)",
+        "        ~~~~~~",
+        "",
+        "## 시스템 1.0.0 - [feat] 첫째 (2026-01-01)",
+        "- 첫 릴리즈",
+    )
+    new = old.replace("[feat] 첫째", "[feat] 첫 릴리즈")
+    assert notify.find_new_releases(old, new, "RELEASE_NOTES.md") == []
+    titles = [c[3] for c in notify._candidates(new)]
+    assert "시스템 1.0.0 - [feat] 첫 릴리즈 (2026-01-01)" in titles
+
+
+def test_펜스는_같은_문자로_길이가_같거나_긴_줄에서만_닫힌다():
+    text = md(
+        "## v2.0.0 (2026-01-02)",
+        "````md",
+        "```",
+        "## v9.9.9 (2026-12-31)",
+        "````",
+        "## v1.0.0 (2026-01-01)",
+    )
+    titles = [c[3] for c in notify._candidates(text)]
+    assert "v9.9.9 (2026-12-31)" not in titles
+    assert "v1.0.0 (2026-01-01)" in titles
+
+
+def test_큰_본문의_유사도_판정이_오래_걸리지_않는다():
+    import time
+    a = ("가나다라마바사 " * 20000)
+    b = a.replace("가나다", "가나라", 50)
+    t = time.time()
+    notify._similar(a, b)
+    assert time.time() - t < 5
+
+
+def test_본문이_같으면_첫_버전이_바뀐_제목_변경도_새_릴리즈가_아니다():
+    # 제목 소급: 축 순서를 바꾸거나(Backend 먼저 -> 시스템 먼저) 화살표 앞 버전을 떼면 열쇠가 바뀐다
+    old = md(
+        "## Backend 3.25.2.0 / 시스템 4.10.1.0 - 2026-04-17",
+        "- 리뷰 지적 반영",
+        "",
+        "### Backend `3.17.0.1` → `3.18.0.0`",
+        "- 일일 추천 전환",
+    )
+    new = md(
+        "## 시스템 4.10.1.0 / Backend 3.25.2.0 - [fix] 리뷰 지적 반영 (2026-04-17)",
+        "- 리뷰 지적 반영",
+        "",
+        "### Backend 3.18.0.0 - [feat] 일일 추천 전환 (2026-04-01)",
+        "- 일일 추천 전환",
+    )
+    assert notify.find_new_releases(old, new, "RELEASE_NOTES.md") == []
+
+
+def test_본문이_같아도_옛_절이_남아_있으면_새_릴리즈다():
+    old = md("## v1.0.0 (2026-01-01)", "- 같은 본문")
+    new = md("## v1.1.0 (2026-01-02)", "- 같은 본문", "", "## v1.0.0 (2026-01-01)", "- 같은 본문")
+    assert [r.heading for r in notify.find_new_releases(old, new, "RELEASE_NOTES.md")] == ["v1.1.0 (2026-01-02)"]
+
+
+def test_본문이_같아도_버전이_다른_새_절은_새_릴리즈다():
+    old = md("## App 1.0.0 (2026-01-01)", "- 재시도 수정")
+    new = md("## App 2.0.0 (2026-10-02)", "- 재시도 수정")
+    assert [r.heading for r in notify.find_new_releases(old, new, "RELEASE_NOTES.md")] == ["App 2.0.0 (2026-10-02)"]
+
+
+def test_본문을_복사한_새_절은_승격으로_보지_않는다():
+    body = "- 같은 문장을 옮겨 적은 본문이다 스무 자 넘게"
+    old = md("## App 12.0.0 (2026-01-01)", body)
+    new = md("## App 2.0.0 (2026-10-02)", body, "", "## App 12.0.0 (2026-01-01)", body)
+    assert [r.heading for r in notify.find_new_releases(old, new, "RELEASE_NOTES.md")] == ["App 2.0.0 (2026-10-02)"]
+    dated = md("## 2026-10-02 - 수정", body, "", "## App 12.0.0 (2026-01-01)", body)
+    assert [r.heading for r in notify.find_new_releases(old, dated, "RELEASE_NOTES.md")] == ["2026-10-02 - 수정"]
+
+
+def test_옛_절_하나로_새_절_둘을_지우지_않는다():
+    old = md("## v1.0.0 (2026-01-01) - A", "- x")
+    new = md("## v1.0.0 (2026-01-01) - B", "- x", "", "## v1.0.0 (2026-01-01) - C", "- x")
+    assert len(notify.find_new_releases(old, new, "RELEASE_NOTES.md")) == 1
+
+
+def test_앞부분만_같은_긴_본문은_같은_절이_아니다():
+    # 실제 노트처럼 줄마다 내용이 다르다. 앞 2,000자 넘게 같고 뒤가 통째로 다르다
+    head = NL.join(f"- 공통 항목 {i}: 수집기 설정과 배치 순서 정리" for i in range(120))
+    old = md("## App 1.0.0 (2026-01-01) - A", head, *[f"- 옛 결과 {i}: 테이블 {i * 7} 행 보정" for i in range(150)])
+    new = md("## App 1.0.0 (2026-01-01) - B", head, *[f"- 새 기능 {i}: 화면 {i * 3} 추가, API 연결" for i in range(150)])
+    assert len(notify.find_new_releases(old, new, "RELEASE_NOTES.md")) == 1
+
+
+def test_승격_예외만으로_26건_축소판이_새_릴리즈가_아니다():
+    # 옛 파일: ## 릴리즈 본문 안에 단계를 잘못 적은 ### 독립 릴리즈. 새 파일: ## 로 올리고 제목도 규격으로
+    body = "- 리뷰 지적 19건 전수 반영, 캐시 키 수정"
+    own = ["- 펀드 8 테이블 신설", "- 펀드 API 8개 추가", "- 펀드 리스트/상세 화면", "- 수집기 수동 트리거"]
+    # stockradar 처럼 절 사이에 --- 가 있다. 없으면 상위 절 본문이 줄어 상위 절이 한 번 더 알려질 수 있다(README 한계)
+    old = md("## v4.11.0.0 - 펀드 페이지 (2026-04-19)", *own, "", "---", "",
+             "### v3.25.2.0 (Backend) / v4.10.1.0 (시스템) - 2026-04-17", body)
+    new = md("## 시스템 4.11.0.0 - [feat] 펀드 페이지 (2026-04-19)", *own, "", "---", "",
+             "## 시스템 4.10.1.0 / Backend 3.25.2.0 - [fix] 리뷰 지적 반영 (2026-04-17)", body)
+    assert notify.find_new_releases(old, new, "RELEASE_NOTES.md") == []
+
+
+def test_본문_일치_예외만으로_축_순서를_바꾼_제목이_새_릴리즈가_아니다():
+    old = md("## Backend 3.25.2.0 / 시스템 4.10.1.0 - 2026-04-17", "- 리뷰 지적 반영")
+    new = md("## 시스템 4.10.1.0 / Backend 3.25.2.0 - [fix] 리뷰 지적 반영 (2026-04-17)", "- 리뷰 지적 반영")
+    assert notify.find_new_releases(old, new, "RELEASE_NOTES.md") == []
+
+
+def test_승격_예외는_본문이_옛_절_하나_안에_있어야_한다():
+    # 옛 ### 제목은 있지만 새 절 본문은 옛 파일 여러 곳 조각을 이어 붙인 것
+    old = md("## v2.0.0 (2026-02-01)", "- 첫 조각 문장 스무 자를 넘기는 설명", "",
+             "### v1.5.0 - 2026-01-15", "- 다른 내용", "", "## v1.0.0 (2026-01-01)", "- 둘째 조각 문장 스무 자를 넘기는 설명")
+    new = md("## v1.5.0 - [feat] 조각 (2026-01-15)", "- 첫 조각 문장 스무 자를 넘기는 설명", "- 둘째 조각 문장 스무 자를 넘기는 설명",
+             "", "## v2.0.0 (2026-02-01)", "- 첫 조각 문장 스무 자를 넘기는 설명", "", "### v1.5.0 - 2026-01-15", "- 다른 내용",
+             "", "## v1.0.0 (2026-01-01)", "- 둘째 조각 문장 스무 자를 넘기는 설명")
+    assert [r.heading for r in notify.find_new_releases(old, new, "RELEASE_NOTES.md")] == ["v1.5.0 - [feat] 조각 (2026-01-15)"]
+
+
+BODY20 = "- 캐시 키 수정과 재시도 간격 조정, 스무 자 넘김"
+
+
+def test_옛_소제목_하나는_두_경로에서_한_번만_짝이_된다():
+    old = md("## 버전 현황", "", "### App 1.0.0 (2026-01-01) - A", BODY20)
+    new = md("## 버전 현황", "", "## App 1.0.0 - [fix] B (2026-01-01)", BODY20, "", "---", "",
+             "## App 1.0.0 - [fix] C (2026-01-01)", BODY20)
+    assert len(notify.find_new_releases(old, new, "RELEASE_NOTES.md")) == 1
+
+
+def test_날짜_없는_옛_소제목을_올린_절은_새_릴리즈다():
+    old = md("## App 1.2.0 (2026-09-01)", "- 기존", "", "---", "", "### App 1.2.1", BODY20)
+    new = md("## App 1.2.1 - [fix] 핫픽스 (2026-10-02)", BODY20, "", "---", "", "## App 1.2.0 (2026-09-01)", "- 기존")
+    assert [r.heading for r in notify.find_new_releases(old, new, "RELEASE_NOTES.md")] == ["App 1.2.1 - [fix] 핫픽스 (2026-10-02)"]
+
+
+def test_승격_예외는_버전이_같아야_하고_본문이_그_아래로_시작해야_한다():
+    old = md("## App 2.0.0 (2026-02-01)", "- 기존", "", "---", "", "### App 1.5.0 - 2026-01-15", BODY20)
+    other_ver = md("## App 1.6.0 - [fix] 다른 버전 (2026-01-15)", BODY20, "", "---", "", "## App 2.0.0 (2026-02-01)", "- 기존")
+    middle = md("## App 1.5.0 - [fix] 중간 (2026-01-15)", "- 앞에 새 문장을 덧붙임", BODY20, "", "---", "", "## App 2.0.0 (2026-02-01)", "- 기존")
+    assert len(notify.find_new_releases(old, other_ver, "RELEASE_NOTES.md")) == 1
+    assert len(notify.find_new_releases(old, middle, "RELEASE_NOTES.md")) == 1
+
+
+def test_본문_일치_경로도_한_번만_짝이_되고_열쇠가_다르면_버전은_부분집합이어야_한다():
+    old = md("## App 1.0.0 / BE 2.0.0 (2026-01-01) - A", BODY20)
+    two = md("## App 1.0.0 / BE 2.0.0 - [fix] B (2026-01-01)", BODY20, "", "---", "",
+             "## App 1.0.0 / BE 2.0.0 - [fix] C (2026-01-01)", BODY20)
+    assert len(notify.find_new_releases(old, two, "RELEASE_NOTES.md")) == 1
+    # 첫 버전(열쇠)이 다르고 버전 일부만 겹치면 본문이 같아도 새 릴리즈다
+    partial = md("## App 3.0.0 / BE 2.0.0 - [fix] B (2026-01-01)", BODY20)
+    assert len(notify.find_new_releases(old, partial, "RELEASE_NOTES.md")) == 1
+
+
+def test_긴_본문은_뒤만_같아도_같은_절이_아니다():
+    tail = NL.join(f"- 공통 꼬리 {i}: 배치 순서와 설정 정리" for i in range(120))
+    old = md("## App 1.0.0 (2026-01-01) - A", *[f"- 옛 머리 {i}: 테이블 {i * 7} 행 보정" for i in range(150)], tail)
+    new = md("## App 1.0.0 (2026-01-01) - B", *[f"- 새 머리 {i}: 화면 {i * 3} 추가" for i in range(150)], tail)
+    assert len(notify.find_new_releases(old, new, "RELEASE_NOTES.md")) == 1
+
+
+def test_본문이_짧은_소제목은_승격으로_보지_않는다():
+    # "- x" 같은 짧은 본문은 우연히 겹친다. 최소 길이 아래면 새 릴리즈로 본다
+    old = md("## App 2.0.0 (2026-02-01)", "- 기존", "", "---", "", "### App 1.5.0 - 2026-01-15", "- x")
+    new = md("## App 1.5.0 - [fix] 짧은 절 (2026-01-15)", "- x", "", "---", "", "## App 2.0.0 (2026-02-01)", "- 기존")
+    assert len(notify.find_new_releases(old, new, "RELEASE_NOTES.md")) == 1

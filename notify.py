@@ -10,6 +10,11 @@ GitHub Actions 의 공용 워크플로(.github/workflows/notify.yml)가 부른�
   - 첫 칸 머리글이 `버전` 인 표에서 첫 칸이 버전인 행(suika-clone 처럼 표에만 적는 레포).
 - 후보마다 열쇠(버전과 짧은 이름표)를 만들고, push 이전보다 개수가 늘어난 것만 새 릴리즈로 본다.
   제목의 오타나 이슈 번호만 고친 push 는 알리지 않는다.
+- 제목만 고친 절: 사라진 옛 절과 본문(제목 줄 제외)이 같고 새 제목의 버전이 모두 옛 제목에
+  있으면 열쇠가 달라도 같은 절이다(축 순서 변경, 화살표 앞 버전 삭제 같은 제목 소급).
+- 단계만 올린 절: 같은 버전의 옛 `###` 제목이 있고 새 `##` 절 본문이 그 `###` 바로 아래 본문으로
+  시작하면 새 릴리즈가 아니다. 옛 절 하나는 한 번만 짝이 된다.
+- 코드 펜스는 CommonMark 대로 들여쓰기 3칸까지다. 긴 본문의 유사도는 앞뒤 2,000자씩 따로 견준다.
 - 이전 파일이 없으면(처음 만든 릴리즈 노트) 맨 위 후보 하나만 알린다. 과거 이력 전체가
   한꺼번에 쏟아지지 않게 하기 위해서다.
 
@@ -47,7 +52,9 @@ NOT_SUMMARY_RE = re.compile(r"(검증|qa|남은|남긴|원인|배경|진단|이�
 # 표 행을 릴리즈로 보는 것은 첫 칸 머리글이 이것일 때뿐이다(suika-clone 의 "| 버전 | 날짜 | 요약 |").
 TABLE_HEAD_RE = re.compile(r"^(버전|version|ver\.?|릴리즈|release)$", re.IGNORECASE)
 BULLET_RE = re.compile(r"^\s{0,3}(?:[-*+]|\d+\.)\s+(.*\S)")
-FENCE_RE = re.compile(r"^\s*(```|~~~)")
+# CommonMark 펜스: 들여쓰기 3칸까지, 같은 문자 3개 이상. 4칸 이상 들여쓴 ~~~~ 는 들여쓴 코드 블록 안의
+# 글자다. 그것을 펜스로 읽어 stockradar 한 절의 본문이 파일 끝(1.2MB)까지 늘어났다
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 TABLE_ROW_RE = re.compile(r"^\s*\|(.*)\|\s*$")
 TABLE_SEP_RE = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
 RULE_RE = re.compile(r"^\s*(---|\*\*\*|___)\s*$")
@@ -56,6 +63,8 @@ MAX_ITEMS = 5
 MAX_ITEM_CHARS = 160
 MAX_RELEASES = 10
 SIMILAR = 0.6   # 제목이 바뀐 절을 같은 절로 볼 본문 유사도
+SIMILAR_MAX_CHARS = 4000   # 이보다 긴 본문은 앞뒤 절반씩 따로 견준다
+MIN_MOVED_BODY = 20        # 단계만 올린 절로 볼 최소 본문 길이. 짧은 본문은 우연히 겹친다
 NL = chr(10)
 MAX_MESSAGE_CHARS = 3500   # Slack 한 메시지 text 는 4,000자에서 잘린다
 
@@ -74,15 +83,19 @@ class _Fence:
         self.mark: str | None = None
 
     def step(self, line: str) -> bool:
-        """이 줄을 건너뛰어야 하면 True(표지 줄 자체 포함)."""
-        m = FENCE_RE.match(line)
-        if m:
-            if self.mark is None:
+        """이 줄을 건너뛰어야 하면 True(표지 줄 자체 포함).
+
+        닫는 줄은 여는 표지와 같은 문자로 길이가 같거나 길고, 뒤에는 공백만 온다.
+        """
+        m = FENCE_RE.match(line.rstrip("\r"))
+        if self.mark is None:
+            if m:
                 self.mark = m.group(1)
-            elif self.mark == m.group(1):
-                self.mark = None
-            return True
-        return self.mark is not None
+                return True
+            return False
+        if m and m.group(1)[0] == self.mark[0] and len(m.group(1)) >= len(self.mark) and not m.group(2).strip():
+            self.mark = None
+        return True
 
 
 def _key(title: str) -> str:
@@ -239,9 +252,46 @@ def _candidates(text: str) -> list[tuple[int, str, int, str, list[str], str]]:
     return out
 
 
+_HEAD_LINE_RE = re.compile(r"^#{1,6}\s")
+
+
+def _strip_heads(text: str) -> str:
+    """제목 줄을 뺀 본문. 제목만 고친 절을 본문으로 짝짓는 데 쓴다."""
+    return NL.join(l for l in text.split(NL) if not _HEAD_LINE_RE.match(l))
+
+
+def _versions(title: str) -> frozenset:
+    """제목의 버전 토큰(v 뗌). 부분 문자열이 아니라 토큰으로 견준다(2.0.0 과 12.0.0 은 다르다)."""
+    return frozenset(m.group(0).lstrip("v") for m in VERSION_RE.finditer(title))
+
+
+def _subheadings(text: str) -> list[tuple[int, str, str]]:
+    """코드 블록 밖의 (줄 번호, ### 제목, 그 바로 아래 본문). 본문은 제목 줄을 빼고 다음 ### 이상 제목이나 --- 까지."""
+    lines = text.replace("\r\n", NL).split(NL)
+    fence = _Fence()
+    out = []
+    for i, line in enumerate(lines):
+        if fence.step(line):
+            continue
+        m = re.match(r"^###\s+(.+?)\s*$", line)
+        if m:
+            out.append((i, m.group(1), _strip_heads(NL.join(_section_lines(lines, i, 3))).strip()))
+    return out
+
+
 def _similar(a: str, b: str) -> bool:
     if a == b:
         return True
+    # ratio() 는 길이 제곱에 비례한다. 수십 KB 본문 둘이면 워크플로 5분 제한을 넘긴다.
+    # 긴 본문은 앞부분끼리, 뒷부분끼리 따로 견줘 둘 다 비슷해야 같은 절이다.
+    # 앞만 보면 머리가 같고 뒤가 다른 절을 같은 절로 본다
+    half = SIMILAR_MAX_CHARS // 2
+    if max(len(a), len(b)) > SIMILAR_MAX_CHARS:
+        return _ratio_ok(a[:half], b[:half]) and _ratio_ok(a[-half:], b[-half:])
+    return _ratio_ok(a, b)
+
+
+def _ratio_ok(a: str, b: str) -> bool:
     sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
     return sm.quick_ratio() >= SIMILAR and sm.ratio() >= SIMILAR
 
@@ -249,11 +299,15 @@ def _similar(a: str, b: str) -> bool:
 def find_new_releases(old_text: str | None, new_text: str, file: str) -> list[Release]:
     """old_text 에 없던 릴리즈를 new_text 에서 찾는다. old_text 가 None 이면 새 파일이다.
 
-    같은 열쇠(_key) 안에서 짝을 짓는다.
     1. 제목이 그대로인 절은 이전 절과 같은 것이다.
-    2. 남은 새 절은 제목이 바뀐 옛 절과 본문을 견준다. 비슷하면 제목만 고친 것이다
+    2. 본문 일치: 제목이 사라진 옛 절과 본문(제목 줄 제외)이 같고 새 제목의 버전이 모두 옛 제목에
+       있으면 제목만 고친 것이다. 열쇠는 보지 않는다(2026-10-02 제목 소급).
+    3. 승격: 같은 버전의 날짜 있는 옛 ### 가 있고 새 절 본문이 그 아래 본문으로 시작하면 ### 를 ## 로
+       올린 것이다.
+    4. 같은 열쇠(_key) 안에서 제목이 바뀐 옛 절과 본문을 견준다. 비슷하면 제목만 고친 것이다
        (이슈 번호 교정 4d0ef31f, 엠대시 치환 e7054aa5, 이름표 변경 4ad07415).
-    3. 짝이 없는 새 절이 새 릴리즈다. 같은 번호를 여러 절에 붙인 경우(stockradar 6.18.2.0)와
+       옛 절 하나는 2~4 를 통틀어 한 번만 짝이 된다.
+    5. 짝이 없는 새 절이 새 릴리즈다. 같은 번호를 여러 절에 붙인 경우(stockradar 6.18.2.0)와
        한 절을 지우고 같은 번호로 다른 절을 쓴 경우도 여기서 잡힌다.
     """
     lines = new_text.splitlines()
@@ -262,13 +316,22 @@ def find_new_releases(old_text: str | None, new_text: str, file: str) -> list[Re
         picked = new[:1]
     else:
         old_titles = Counter(c[3] for c in _candidates(old_text))
-        removed: dict[str, list[str]] = {}   # 열쇠별로 제목이 사라진 옛 절의 본문
+        # 제목이 사라진 옛 절. 한 절은 한 번만 짝이 된다. 옛 ### 하나가 아래 두 목록에 함께
+        # 들어갈 수 있어 사용 표시는 옛 줄 번호로 공유한다
+        used: set[int] = set()
+        removed: list[dict] = []
         new_titles = Counter(c[3] for c in new)
         for c in _candidates(old_text):
             if new_titles[c[3]] > 0:
                 new_titles[c[3]] -= 1
             else:
-                removed.setdefault(_key(c[3]), []).append(c[5])
+                removed.append({"line": c[0], "key": _key(c[3]), "kind": c[1], "body": c[5],
+                                "flat": _strip_heads(c[5]).strip(), "vers": _versions(c[3])})
+        # 옛 파일의 ### 제목과 그 아래 본문. ## 로 올린 절의 짝 후보다
+        # 날짜가 있는 것만. 날짜 없는 컴포넌트 소제목(### Backend 3.18.0.0)은 lint 가 못 막아, 다음 push 에
+        # ## 로 올린 진짜 새 릴리즈를 승격으로 오인할 수 있다
+        old_subheads = [{"line": i, "vers": _versions(t), "body": b}
+                        for i, t, b in _subheadings(old_text) if DATE_RE.search(t)]
         # 표 행은 옛 파일 어디에도(제목이든 행이든) 없던 버전일 때만 새 것이다.
         # 같은 버전의 제목 절을 지우자 표 행이 새 릴리즈로 잡혔다(ai-squad cf6d10e7)
         old_versions = {m.group(0).lstrip("v") for c in _scan(old_text) for m in VERSION_RE.finditer(c[3])}
@@ -279,12 +342,29 @@ def find_new_releases(old_text: str | None, new_text: str, file: str) -> list[Re
                 continue
             if c[1] == "t" and c[3].lstrip("v") in old_versions:
                 continue
-            pool = removed.get(_key(c[3]), [])
-            match = next((j for j, body in enumerate(pool) if _similar(body, c[5])), None)
-            if match is None:
+            if c[1] == "h":
+                flat, vers = _strip_heads(c[5]).strip(), _versions(c[3])
+                # 사라진 옛 절과 본문(제목 줄 제외)이 같고, 새 제목의 버전이 모두 옛 제목에 있으면
+                # 제목만 고친 것이다. 열쇠(첫 버전)는 보지 않는다. 제목 소급에서 축 순서를 바꾸거나
+                # 화살표 앞 버전을 떼면 열쇠가 바뀐다(2026-10-02 149건). 버전이 다르면 새 릴리즈다
+                r = next((r for r in removed if r["line"] not in used and r["kind"] == "h" and flat
+                          and r["flat"] == flat and vers and vers <= r["vers"]), None)
+                if r is not None:
+                    used.add(r["line"])
+                    continue
+                # 옛 파일의 ### 를 ## 로 올린 경우. 같은 버전을 가진 옛 ### 제목이 있고, 새 절 본문이
+                # 그 ### 바로 아래 본문으로 시작해야 한다(stockradar 4.11.0.0 아래 26건)
+                s = next((s for s in old_subheads if s["line"] not in used and vers and vers <= s["vers"]
+                          and len(s["body"]) >= MIN_MOVED_BODY and flat.startswith(s["body"])), None)
+                if s is not None:
+                    used.add(s["line"])
+                    continue
+            r = next((r for r in removed if r["line"] not in used and r["key"] == _key(c[3])
+                      and _similar(r["body"], c[5])), None)
+            if r is None:
                 picked.append(c)
             else:
-                pool.pop(match)
+                used.add(r["line"])
     out = []
     for i, kind, lv, t, cells, _ in picked:
         if kind == "t":

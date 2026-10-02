@@ -1,2 +1,5 @@
 __pycache__/
 .pytest_cache/
+# issuelog 가 엑셀 로그를 쓰기 전에 남기는 백업. public 레포라 올리지 않는다
+.issuelog_backup/
+*.xlsx.lock
