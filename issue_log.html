@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>release-notify 이슈 로그</title>
+<style>
+:root {
+  --bg: hsl(30 10% 98%);
+  --fg: hsl(222 16% 11%);
+  --surface: hsl(0 0% 100%);
+  --surface-2: hsl(30 10% 96%);
+  --muted: hsl(30 4% 40%);
+  --border: hsl(30 8% 90%);
+  --hover: hsl(30 10% 94%);
+  --primary: hsl(243 75% 59%);
+  --primary-soft: hsl(226 100% 94%);
+  --primary-fg: hsl(0 0% 100%);
+  --open: hsl(142 70% 33%);
+  --done: hsl(262 52% 50%);
+  --ok-bg: hsl(142 76% 95%);  --ok-fg: hsl(142 76% 28%);
+  --warn-bg: hsl(38 92% 94%); --warn-fg: hsl(30 92% 30%);
+  --bad-bg: hsl(0 84% 95%);   --bad-fg: hsl(0 84% 35%);
+  --info-bg: hsl(217 91% 95%); --info-fg: hsl(217 91% 35%);
+  --neutral-bg: hsl(30 10% 93%); --neutral-fg: hsl(30 4% 34%);
+  --shadow: 0 12px 24px rgba(0,0,0,.08), 0 4px 8px rgba(0,0,0,.06);
+  --scrim: rgba(15, 17, 26, .38);
+  --sans: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  --display: "SUIT Variable", SUIT, "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: hsl(230 18% 15%);
+    --fg: hsl(230 10% 87%);
+    --surface: hsl(230 16% 18%);
+    --surface-2: hsl(230 16% 22%);
+    --muted: hsl(230 8% 68%);
+    --border: hsl(230 14% 28%);
+    --hover: hsl(230 16% 23%);
+    --primary: hsl(234 89% 74%);
+    --primary-soft: hsl(244 47% 26%);
+    --primary-fg: hsl(240 25% 12%);
+    --open: hsl(142 60% 58%);
+    --done: hsl(262 70% 76%);
+    --ok-bg: hsl(142 60% 16%);  --ok-fg: hsl(142 70% 72%);
+    --warn-bg: hsl(38 80% 16%); --warn-fg: hsl(38 92% 72%);
+    --bad-bg: hsl(0 70% 18%);   --bad-fg: hsl(0 84% 78%);
+    --info-bg: hsl(217 80% 20%); --info-fg: hsl(217 91% 80%);
+    --neutral-bg: hsl(230 14% 26%); --neutral-fg: hsl(230 8% 76%);
+    --shadow: 0 12px 28px rgba(0,0,0,.45);
+    --scrim: rgba(0, 0, 0, .55);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: hsl(230 18% 15%);
+  --fg: hsl(230 10% 87%);
+  --surface: hsl(230 16% 18%);
+  --surface-2: hsl(230 16% 22%);
+  --muted: hsl(230 8% 68%);
+  --border: hsl(230 14% 28%);
+  --hover: hsl(230 16% 23%);
+  --primary: hsl(234 89% 74%);
+  --primary-soft: hsl(244 47% 26%);
+  --primary-fg: hsl(240 25% 12%);
+  --open: hsl(142 60% 58%);
+  --done: hsl(262 70% 76%);
+  --ok-bg: hsl(142 60% 16%);  --ok-fg: hsl(142 70% 72%);
+  --warn-bg: hsl(38 80% 16%); --warn-fg: hsl(38 92% 72%);
+  --bad-bg: hsl(0 70% 18%);   --bad-fg: hsl(0 84% 78%);
+  --info-bg: hsl(217 80% 20%); --info-fg: hsl(217 91% 80%);
+  --neutral-bg: hsl(230 14% 26%); --neutral-fg: hsl(230 8% 76%);
+  --shadow: 0 12px 28px rgba(0,0,0,.45);
+  --scrim: rgba(0, 0, 0, .55);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+
+.top {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.top-inner, .wrap, .foot {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.top-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+.top h1 { margin: 0; font: 700 22px/1.3 var(--display); letter-spacing: -.01em; }
+.meta { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.meta a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px; height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 20px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: 0;
+  background: none;
+  padding: 8px 12px 10px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+}
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--primary); }
+.tab .n { font-weight: 500; margin-left: 4px; color: var(--muted); }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 3px;
+}
+.seg button {
+  border: 0;
+  background: none;
+  padding: 6px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.seg button:hover { color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--primary); color: var(--primary-fg); }
+.seg .n { font-weight: 500; opacity: .8; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.search {
+  flex: 1 1 260px;
+  min-width: 0;
+  position: relative;
+}
+.search input {
+  width: 100%;
+  height: 38px;
+  padding: 0 40px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.search kbd {
+  position: absolute;
+  right: 10px; top: 50%;
+  transform: translateY(-50%);
+  font: 11px var(--mono);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.fgroup { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fgroup > span { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.chip:hover { background: var(--hover); }
+.chip[aria-pressed="true"] {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--fg);
+  font-weight: 600;
+}
+.chip .n { color: var(--muted); margin-left: 3px; font-variant-numeric: tabular-nums; }
+.chip:disabled { opacity: .45; cursor: default; }
+.reset {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 13px;
+}
+.reset[hidden] { display: none; }
+
+.count { margin: 14px 2px 8px; color: var(--muted); font-size: 13px; }
+
+.list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.row {
+  display: grid;
+  grid-template-columns: 22px 92px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: start;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--primary-soft); }
+.st { width: 18px; height: 18px; margin-top: 2px; }
+.st.open { color: var(--open); }
+.st.done { color: var(--done); }
+.num { color: var(--muted); padding-top: 1px; white-space: nowrap; }
+.title-btn {
+  display: block;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.sub .dot { opacity: .5; }
+.key { white-space: nowrap; padding-top: 1px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.b-neutral { background: var(--neutral-bg); color: var(--neutral-fg); }
+.b-bad { background: var(--bad-bg); color: var(--bad-fg); }
+.b-warn { background: var(--warn-bg); color: var(--warn-fg); }
+.b-info { background: var(--info-bg); color: var(--info-fg); }
+.b-ok { background: var(--ok-bg); color: var(--ok-fg); }
+.b-open { background: var(--ok-bg); color: var(--ok-fg); }
+.b-done { background: var(--neutral-bg); color: var(--done); }
+.b-outline { border: 1px solid var(--border); color: var(--muted); font-weight: 500; }
+
+.empty { padding: 48px 16px; text-align: center; color: var(--muted); }
+.empty button { margin-top: 10px; }
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--hover); }
+
+.scrim {
+  position: fixed; inset: 0;
+  background: var(--scrim);
+  z-index: 10;
+}
+.drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(720px, 100%);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+}
+[hidden] { display: none !important; }
+.d-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.d-head .grow { flex: 1; }
+.d-nav { display: flex; gap: 6px; }
+.d-body { overflow: auto; padding: 20px 24px 40px; }
+.d-body h2 { margin: 0 0 10px; font: 700 21px/1.4 var(--display); overflow-wrap: anywhere; }
+.d-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 16px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  margin-bottom: 22px;
+}
+.facts div > span { display: block; color: var(--muted); font-size: 12px; }
+.facts div > b { font-weight: 600; overflow-wrap: anywhere; }
+.block-title {
+  margin: 26px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.field { margin-top: 14px; }
+.field h3 { margin: 0 0 4px; font-size: 13.5px; }
+.text { overflow-wrap: anywhere; }
+.text p { margin: 0 0 6px; }
+.text ul, .text ol { margin: 0 0 6px; padding-left: 20px; }
+.text li { margin: 2px 0; }
+.text li.task { list-style: none; margin-left: -18px; }
+.text li.task input { margin: 0 6px 0 0; vertical-align: -2px; }
+.text code {
+  font: 12.5px var(--mono);
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.text pre {
+  font: 12px/1.5 var(--mono);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow: auto;
+  margin: 4px 0 8px;
+}
+.text pre code { background: none; padding: 0; }
+
+.held-wrap {
+  margin-top: 16px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.held-note { color: var(--muted); font-size: 13px; margin: 16px 2px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+th { border-top: 0; background: var(--surface-2); white-space: nowrap; font-weight: 600; }
+
+.foot {
+  padding-top: 28px;
+  padding-bottom: 36px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .top-inner, .wrap, .foot { padding-left: 16px; padding-right: 16px; }
+  .row { grid-template-columns: 20px minmax(0, 1fr); padding: 12px; }
+  .row .num { grid-column: 2; grid-row: 1; }
+  .row .main { grid-column: 2; }
+  .row .key { grid-column: 2; }
+  .st { grid-row: 1 / span 2; }
+  .d-body { padding: 16px 16px 32px; }
+  .seg { width: 100%; }
+  .seg button { flex: 1; padding: 6px 8px; }
+  .reset { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <h1 id="project">이슈 로그</h1>
+      <p class="meta" id="meta"></p>
+    </div>
+    <button class="icon-btn" id="theme" type="button" aria-label="화면 테마 바꾸기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <nav class="tabs" role="tablist" id="tabs" hidden>
+    <button class="tab" role="tab" id="tab-issues" aria-controls="view-issues" aria-selected="true" type="button">이슈<span class="n" id="tab-issues-n"></span></button>
+    <button class="tab" role="tab" id="tab-held" aria-controls="view-held" aria-selected="false" type="button">조인 보류<span class="n" id="tab-held-n"></span></button>
+  </nav>
+
+  <section id="view-issues" role="tabpanel" aria-labelledby="tab-issues">
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="상태" id="status"></div>
+      <label class="search">
+        <input type="search" id="q" placeholder="제목, 번호, 본문, 버전 검색" autocomplete="off" aria-label="검색">
+        <kbd>/</kbd>
+      </label>
+      <select id="sort" aria-label="정렬">
+        <option value="new">최근 발견 순</option>
+        <option value="old">오래된 순</option>
+        <option value="sev">심각도 순</option>
+        <option value="num">이슈번호 순</option>
+      </select>
+    </div>
+    <div class="filters" id="filters"></div>
+    <p class="count" id="count" aria-live="polite"></p>
+    <div class="list" id="list"></div>
+  </section>
+
+  <section id="view-held" role="tabpanel" aria-labelledby="tab-held" hidden>
+    <p class="held-note">트래커 이슈와 제목만 비슷해서 자동으로 잇지 않은 행입니다. 판정 칸은 사람이 채웁니다.</p>
+    <div class="held-wrap"><table id="held"></table></div>
+  </section>
+</main>
+
+<footer class="foot" id="foot"></footer>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="d-title" hidden>
+  <div class="d-head">
+    <span class="mono" id="d-num"></span>
+    <span id="d-state"></span>
+    <span class="grow"></span>
+    <div class="d-nav">
+      <button class="btn" type="button" id="d-prev" aria-label="이전 이슈">이전</button>
+      <button class="btn" type="button" id="d-next" aria-label="다음 이슈">다음</button>
+      <button class="btn" type="button" id="d-close" aria-label="닫기">닫기</button>
+    </div>
+  </div>
+  <div class="d-body" id="d-body"></div>
+</aside>
+
+<script type="application/json" id="issue-data">{"format":"issuelog/1","project":"release-notify","repo":"sym804/release-notify","tracker":"linear","links":{"github":"https://github.com/sym804/release-notify/issues/","linear":"https://linear.app/sym804/issue/"},"updated_at":"2026-10-21T00:36:56+09:00","fields":["이슈번호","발견일","유형","심각도","영역","제목","증상 / 현재 상태","기대 결과 / 바꾼 뒤 상태","실제 결과","사전 조건","재현 절차 / 완료 조건","재현 빈도","증거","발견 경로 / 왜 지금인가","원인 및 수정 / 결과","재발 방지 / 하지 않을 것","영향 범위","발생 버전","수정 버전","상태","트래커"],"issues":[{"이슈번호":1,"발견일":"2026-10-02","유형":"bug","심각도":"major","영역":"etc","제목":"들여쓴 물결 밑줄을 코드 펜스로 읽어 stockradar 알림 잡이 시간 초과로 실패한다","증상 / 현재 상태":"- stockradar 노트 제목을 소급한 push 를 넣으면 notify.py 가 5분 안에 끝나지 않는다\n- 제목만 바뀐 절 149건을 새 릴리즈로 판정한다","기대 결과 / 바꾼 뒤 상태":"- 제목만 고친 절은 새 릴리즈가 아니고, 판정은 몇 초 안에 끝난다","실제 결과":"- FENCE_RE 가 8칸 들여쓴 ~~~~ 밑줄을 펜스로 읽어 한 절 본문이 파일 끝(1.2MB)까지 늘어나고, difflib ratio() 가 끝나지 않는다\n- 축 순서를 바꾸거나 화살표 앞 버전을 뗀 제목은 열쇠(첫 버전)가 달라 짝을 못 찾는다","재현 절차 / 완료 조건":"1. stockradar 작업본(제목 소급)과 HEAD 노트로 find_new_releases 를 부른다\n2. 5분 이상 걸리거나, 끝나면 149건을 새 릴리즈로 낸다","재현 빈도":"- 항상","증거":"- stockradar web/RELEASE_NOTES.md 10945행 '        ~~~~' 밑줄. QA2 측정 quick_ratio 0.9965 후 ratio() 5분 초과","발견 경로 / 왜 지금인가":"- QA (릴리즈 노트 제목 소급 검증)","원인 및 수정 / 결과":"- 원인: FENCE_RE 가 들여쓰기 무제한이라 8칸 들여쓴 ~~~~ 밑줄을 펜스로 읽어 한 절 본문이 파일 끝까지 늘었고, 제목 소급으로 열쇠(첫 버전)가 바뀐 절은 짝을 못 찾았다\n- 수정: CommonMark 펜스, 긴 본문 앞뒤 분할 비교, 본문 일치(버전 부분집합) 짝짓기, 날짜 있는 ### 승격 예외, 옛 절 한 번만 짝","재발 방지 / 하지 않을 것":"- 테스트 46 -> 64건. 핵심 분기 변이 15개 전부 잡힘","발생 버전":"1.0.0.0","수정 버전":"1.0.1.0","상태":"완료","트래커":"SYM-135"}]}</script>
+<script>
+(function () {
+  "use strict";
+
+  var SEVERITIES = ["blocker", "critical", "major", "minor", "trivial"];
+  var SEV_CLASS = { blocker: "b-bad", critical: "b-bad", major: "b-warn", minor: "b-info", trivial: "b-neutral" };
+  var AREAS = ["db", "backend", "frontend", "security", "etc"];
+  var KIND_LABEL = { bug: "버그", enhancement: "개선" };
+  var DONE = "완료";
+  var SORTS = ["new", "old", "sev", "num"];
+  var AREA_ALIAS = { "보안": "security", "기타": "etc", "프론트": "frontend", "백엔드": "backend" };
+
+  // 칸 이름은 "버그 / 개선" 두 양식이 같이 쓴다. 이슈 유형에 맞는 쪽만 보여 준다.
+  var LABELS = {
+    "증상 / 현재 상태": ["증상", "현재 상태"],
+    "기대 결과 / 바꾼 뒤 상태": ["기대 결과", "바꾼 뒤 상태"],
+    "실제 결과": ["실제 결과", "실제 결과"],
+    "사전 조건": ["사전 조건", "사전 조건"],
+    "재현 절차 / 완료 조건": ["재현 절차", "완료 조건"],
+    "재현 빈도": ["재현 빈도", "재현 빈도"],
+    "증거": ["증거", "증거"],
+    "발견 경로 / 왜 지금인가": ["발견 경로", "왜 지금인가"],
+    "원인 및 수정 / 결과": ["원인과 수정", "결과"],
+    "재발 방지 / 하지 않을 것": ["재발 방지", "하지 않을 것"],
+    "영향 범위": ["영향 범위", "영향 범위"],
+    "발생 버전": ["발생 버전", "착수 버전"],
+    "수정 버전": ["수정 버전", "반영 버전"]
+  };
+  var FOUND_BLOCK = ["증상 / 현재 상태", "기대 결과 / 바꾼 뒤 상태", "실제 결과", "사전 조건",
+    "재현 절차 / 완료 조건", "재현 빈도", "증거", "발견 경로 / 왜 지금인가"];
+  var CLOSE_BLOCK = ["원인 및 수정 / 결과", "재발 방지 / 하지 않을 것", "영향 범위"];
+  // 개선 양식은 착수할 때 '하지 않을 것' 까지 쓰고, 닫을 때 '결과' 를 쓴다.
+  var BLOCKS = {
+    bug: [["발견", FOUND_BLOCK], ["종결", CLOSE_BLOCK]],
+    enhancement: [
+      ["계획", ["증상 / 현재 상태", "기대 결과 / 바꾼 뒤 상태", "발견 경로 / 왜 지금인가",
+                "재현 절차 / 완료 조건", "재발 방지 / 하지 않을 것",
+                "실제 결과", "사전 조건", "재현 빈도", "증거"]],
+      ["결과", ["원인 및 수정 / 결과", "영향 범위"]]
+    ]
+  };
+  var SHOWN_ELSEWHERE = ["이슈번호", "발견일", "유형", "심각도", "영역", "제목", "발생 버전", "수정 버전", "상태", "트래커"];
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function str(v) { return v === undefined || v === null ? "" : String(v); }
+  function blank(v) { return str(v).trim() === ""; }
+
+  // -- 데이터 --------------------------------------------------------------
+  var data;
+  try { data = JSON.parse($("issue-data").textContent); }
+  catch (e) { data = null; }
+  if (!data || !data.issues) {
+    document.body.innerHTML = '<p style="padding:24px">이슈 데이터를 읽지 못했습니다. <code>python run.py render 프로젝트</code> 로 다시 만들어 주세요.</p>';
+    return;
+  }
+
+  var issues = [];
+  function load(d) {
+    data = d;
+    issues = d.issues.map(function (raw, i) {
+      var kind = str(raw["유형"]).trim().toLowerCase();
+      // 칸에 설명을 덧붙인 행이 있다("minor (테스트 전용 ...)"). 거르기는 앞의 단어로 한다.
+      var sevRaw = str(raw["심각도"]).trim().toLowerCase();
+      var sevHead = sevRaw.match(/^(blocker|critical|major|minor|trivial)\b/);
+      var sev = sevHead ? sevHead[1] : sevRaw;
+      var status = str(raw["상태"]).trim();
+      var hay = Object.keys(raw).map(function (k) { return str(raw[k]); }).join("\n").toLowerCase();
+      return {
+        i: i, raw: raw, kind: kind, sev: sev,
+        area: AREA_ALIAS[str(raw["영역"]).trim().toLowerCase()] || str(raw["영역"]).trim().toLowerCase(),
+        status: status,
+        done: status === DONE,
+        num: str(raw["이슈번호"]).trim(),
+        title: str(raw["제목"]).trim() || "(제목 없음)",
+        found: str(raw["발견일"]).slice(0, 10),
+        key: str(raw["트래커"]).trim(),
+        hay: hay
+      };
+    });
+  }
+  load(data);
+
+  function trackerUrl(key) {
+    var links = data.links || {};
+    var safe = function (base) { return /^https:\/\//i.test(str(base)) ? str(base) : ""; };
+    var gh = safe(links.github), lin = safe(links.linear);
+    if (/^\d+$/.test(key) && gh) return gh + key;
+    if (/^[A-Za-z]+-\d+$/.test(key) && lin) return lin + key.toUpperCase();
+    return "";
+  }
+  function keyLabel(key) { return /^\d+$/.test(key) ? "#" + key : key; }
+
+  // -- 상태(주소창 해시) -----------------------------------------------------
+  var state = { status: null, kind: [], sev: [], area: [], q: "", sort: "new", tab: "issues", open: null };
+
+  function readHash() {
+    var p = new URLSearchParams(location.hash.replace(/^#/, ""));
+    var list = function (k) { return (p.get(k) || "").split(",").filter(Boolean); };
+    var st = p.get("status");
+    // 상태를 고르지 않았으면 미완료부터 보여 준다. 미완료가 없으면 전체.
+    state.status = st === "all" || st === "open" || st === "done" ? st
+      : (issues.some(function (it) { return !it.done; }) ? "open" : "all");
+    state.kind = list("kind");
+    state.sev = list("sev");
+    state.area = list("area");
+    state.q = p.get("q") || "";
+    state.sort = SORTS.indexOf(p.get("sort")) >= 0 ? p.get("sort") : "new";
+    state.tab = p.get("tab") === "held" ? "held" : "issues";
+    var o = p.get("issue");
+    state.open = o !== null && /^\d+$/.test(o) && issues[+o] ? +o : null;
+  }
+  function writeHash() {
+    var p = new URLSearchParams();
+    if (state.status) p.set("status", state.status);
+    if (state.kind.length) p.set("kind", state.kind.join(","));
+    if (state.sev.length) p.set("sev", state.sev.join(","));
+    if (state.area.length) p.set("area", state.area.join(","));
+    if (state.q) p.set("q", state.q);
+    if (state.sort !== "new") p.set("sort", state.sort);
+    if (state.tab === "held") p.set("tab", "held");
+    if (state.open !== null) p.set("issue", String(state.open));
+    var h = p.toString();
+    history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
+  }
+
+  // -- 거르기 --------------------------------------------------------------
+  function statusOk(it, s) {
+    if (s === "open") return !it.done;
+    if (s === "done") return it.done;
+    return true;
+  }
+  function matches(it, skip) {
+    if (skip !== "status" && !statusOk(it, state.status)) return false;
+    if (skip !== "kind" && state.kind.length && state.kind.indexOf(it.kind) < 0) return false;
+    if (skip !== "sev" && state.sev.length && state.sev.indexOf(it.sev) < 0) return false;
+    if (skip !== "area" && state.area.length && state.area.indexOf(it.area) < 0) return false;
+    if (state.q) {
+      var words = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+      for (var w = 0; w < words.length; w++) if (it.hay.indexOf(words[w]) < 0) return false;
+    }
+    return true;
+  }
+  function natural(a, b) {
+    return a.localeCompare(b, "ko", { numeric: true, sensitivity: "base" });
+  }
+  function sorted(list) {
+    var by = {
+      "new": function (a, b) { return natural(b.found, a.found) || b.i - a.i; },
+      "old": function (a, b) { return natural(a.found, b.found) || a.i - b.i; },
+      "sev": function (a, b) {
+        var ra = SEVERITIES.indexOf(a.sev), rb = SEVERITIES.indexOf(b.sev);
+        if (ra < 0) ra = 99;
+        if (rb < 0) rb = 99;
+        return ra - rb || natural(b.found, a.found) || b.i - a.i;
+      },
+      "num": function (a, b) { return natural(a.num, b.num) || a.i - b.i; }
+    }[state.sort] || null;
+    return by ? list.slice().sort(by) : list;
+  }
+  var visible = [];
+  var typing;
+
+  // -- 그리기 --------------------------------------------------------------
+  var ICON_OPEN = '<svg class="st open" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>';
+  var ICON_DONE = '<svg class="st done" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.8 8.2l2.1 2.1 4.3-4.4" fill="none" stroke="var(--surface)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function sevBadge(sev) {
+    if (!sev) return "";
+    return '<span class="badge ' + (SEV_CLASS[sev] || "b-neutral") + '">' + esc(sev) + "</span>";
+  }
+  function kindBadge(kind) {
+    if (!kind) return "";
+    return '<span class="badge b-outline">' + esc(KIND_LABEL[kind] || kind) + "</span>";
+  }
+  function statusBadge(it) {
+    var label = it.status || "상태 없음";
+    return '<span class="badge ' + (it.done ? "b-done" : "b-open") + '">' + esc(label) + "</span>";
+  }
+
+  function renderStatus() {
+    var base = issues.filter(function (it) { return matches(it, "status"); });
+    var open = base.filter(function (it) { return !it.done; }).length;
+    var opts = [["all", "전체", base.length], ["open", "미완료", open], ["done", "완료", base.length - open]];
+    $("status").innerHTML = opts.map(function (o) {
+      return '<button type="button" data-status="' + o[0] + '" aria-pressed="' + (state.status === o[0]) + '">' +
+        esc(o[1]) + '<span class="n">' + o[2] + "</span></button>";
+    }).join("");
+  }
+
+  function chipGroup(name, label, values, labelOf) {
+    var base = issues.filter(function (it) { return matches(it, name); });
+    var counts = {};
+    base.forEach(function (it) { counts[it[name]] = (counts[it[name]] || 0) + 1; });
+    var present = values.filter(function (v) {
+      return issues.some(function (it) { return it[name] === v; });
+    });
+    issues.forEach(function (it) {
+      if (it[name] && present.indexOf(it[name]) < 0) present.push(it[name]);
+    });
+    if (!present.length) return "";
+    return '<div class="fgroup" role="group" aria-label="' + esc(label) + '"><span>' + esc(label) + "</span>" +
+      present.map(function (v) {
+        var on = state[name].indexOf(v) >= 0;
+        var n = counts[v] || 0;
+        return '<button type="button" class="chip" data-group="' + name + '" data-value="' + esc(v) +
+          '" title="' + esc(labelOf ? labelOf(v) : v) + '" aria-pressed="' + on + '"' + (!n && !on ? " disabled" : "") + ">" +
+          esc(labelOf ? labelOf(v) : v) + '<span class="n">' + n + "</span></button>";
+      }).join("") + "</div>";
+  }
+
+  function renderFilters() {
+    var any = state.kind.length || state.sev.length || state.area.length || state.q;
+    $("filters").innerHTML =
+      chipGroup("kind", "유형", ["bug", "enhancement"], function (v) { return KIND_LABEL[v] || v; }) +
+      chipGroup("sev", "심각도", SEVERITIES) +
+      chipGroup("area", "영역", AREAS) +
+      '<button type="button" class="reset" id="reset"' + (any ? "" : " hidden") + ">조건 지우기</button>";
+  }
+
+  function rowHtml(it) {
+    var url = it.key ? trackerUrl(it.key) : "";
+    var key = it.key
+      ? (url ? '<a class="mono" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(keyLabel(it.key)) + "</a>"
+             : '<span class="mono">' + esc(keyLabel(it.key)) + "</span>")
+      : "";
+    // 목록에는 첫 줄만, 불릿 기호는 떼고 보인다. 전체는 상세 화면에 있다.
+    var fix = str(it.raw["수정 버전"]).trim().split("\n")[0].replace(/^[-*]\s+/, "");
+    var sub = [kindBadge(it.kind), sevBadge(it.sev)];
+    if (it.area) sub.push('<span class="badge b-outline">' + esc(it.area) + "</span>");
+    if (it.found) sub.push('<span>' + esc(it.found) + "</span>");
+    if (fix) sub.push('<span class="dot">|</span><span>' + esc(fix) + "</span>");
+    if (!it.done && it.status) sub.push(statusBadge(it));
+    return '<div class="row' + (state.open === it.i ? " sel" : "") + '" data-i="' + it.i + '">' +
+      (it.done ? ICON_DONE : ICON_OPEN) +
+      '<span class="num mono">' + esc(it.num) + "</span>" +
+      '<div class="main"><button type="button" class="title-btn" data-i="' + it.i + '">' + esc(it.title) + "</button>" +
+      '<div class="sub">' + sub.filter(Boolean).join("") + "</div></div>" +
+      '<span class="key">' + key + "</span></div>";
+  }
+
+  function renderList() {
+    visible = sorted(issues.filter(function (it) { return matches(it); }));
+    $("count").textContent = visible.length === issues.length
+      ? issues.length + "건"
+      : issues.length + "건 중 " + visible.length + "건";
+    if (!visible.length) {
+      $("list").innerHTML = '<div class="empty">조건에 맞는 이슈가 없습니다.<br>' +
+        '<button type="button" class="btn" id="empty-reset">조건 지우기</button></div>';
+      return;
+    }
+    $("list").innerHTML = visible.map(rowHtml).join("");
+  }
+
+  // 본문은 이슈 양식의 마크다운 일부만 쓴다: 불릿, 번호, 체크박스, 코드.
+  function links(t) {
+    var parts = String(t).split(/(https?:\/\/[^\s<>"'`*()\[\]]*[^\s<>"'`*()\[\].,;:!?])/);
+    return parts.map(function (part, i) {
+      return i % 2 ? '<a href="' + esc(part) + '" target="_blank" rel="noopener">' + esc(part) + "</a>" : esc(part);
+    }).join("");
+  }
+  // 굵게 구간을 먼저 떼고 그 안팎에서 링크를 찾는다. 링크를 먼저 쪼개면 ** 짝이 갈라진다.
+  function linked(t) {
+    return String(t).split(/(\*\*[^*]+\*\*)/).map(function (part, i) {
+      return i % 2 ? "<strong>" + links(part.slice(2, -2)) + "</strong>" : links(part);
+    }).join("");
+  }
+  // 코드 구간을 먼저 떼어 낸다. 그 안의 주소는 링크로 바꾸지 않는다.
+  function inline(s) {
+    return String(s).split(/(`[^`]+`)/).map(function (part, i) {
+      return i % 2 ? "<code>" + esc(part.slice(1, -1)) + "</code>" : linked(part);
+    }).join("");
+  }
+  function renderText(text) {
+    var lines = str(text).replace(/\r\n?/g, "\n").split("\n");
+    var html = [], list = null, fence = null;
+    function close() { if (list) { html.push("</" + list + ">"); list = null; } }
+    lines.forEach(function (line) {
+      if (fence !== null) {
+        if (/^\s*(```|~~~)/.test(line)) { html.push("<pre><code>" + esc(fence.join("\n")) + "</code></pre>"); fence = null; }
+        else fence.push(line);
+        return;
+      }
+      if (/^\s*(```|~~~)/.test(line)) { close(); fence = []; return; }
+      var m;
+      if ((m = line.match(/^\s*[-*]\s+\[( |x|X)\]\s*(.*)$/))) {
+        if (list !== "ul") { close(); html.push("<ul>"); list = "ul"; }
+        html.push('<li class="task"><input type="checkbox" disabled' + (m[1] === " " ? "" : " checked") + ">" + inline(m[2]) + "</li>");
+      } else if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
+        if (list !== "ul") { close(); html.push("<ul>"); list = "ul"; }
+        html.push("<li>" + inline(m[1]) + "</li>");
+      } else if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)$/))) {
+        if (list !== "ol") { close(); html.push('<ol start="' + m[1] + '">'); list = "ol"; }
+        html.push("<li>" + inline(m[2]) + "</li>");
+      } else if (blank(line)) {
+        close();
+      } else {
+        close();
+        html.push("<p>" + inline(line) + "</p>");
+      }
+    });
+    if (fence !== null) html.push("<pre><code>" + esc(fence.join("\n")) + "</code></pre>");
+    close();
+    return html.join("");
+  }
+
+  function fieldLabel(field, kind) {
+    var pair = LABELS[field];
+    if (!pair) return field;
+    if (kind === "enhancement") return pair[1];
+    if (kind === "bug") return pair[0];
+    return field;
+  }
+  function fieldsHtml(it, names) {
+    return names.filter(function (f) { return !blank(it.raw[f]); }).map(function (f) {
+      return '<div class="field"><h3>' + esc(fieldLabel(f, it.kind)) + '</h3><div class="text">' +
+        renderText(it.raw[f]) + "</div></div>";
+    }).join("");
+  }
+
+  function renderDrawer() {
+    var it = state.open === null ? null : issues[state.open];
+    $("drawer").hidden = !it;
+    $("scrim").hidden = !it;
+    document.body.style.overflow = it ? "hidden" : "";
+    if (!it) return;
+    $("d-num").textContent = it.num;
+    $("d-state").innerHTML = statusBadge(it);
+    var url = it.key ? trackerUrl(it.key) : "";
+    var facts = [
+      ["발견일", it.found],
+      [fieldLabel("발생 버전", it.kind), str(it.raw["발생 버전"])],
+      [fieldLabel("수정 버전", it.kind), str(it.raw["수정 버전"])],
+      ["트래커", it.key ? (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(keyLabel(it.key)) + "</a>" : esc(keyLabel(it.key))) : "", true]
+    ].filter(function (f) { return !blank(f[1]); });
+    var known = FOUND_BLOCK.concat(CLOSE_BLOCK, SHOWN_ELSEWHERE);
+    var extra = (data.fields || []).filter(function (f) { return known.indexOf(f) < 0; });
+    var blocks = (BLOCKS[it.kind] || BLOCKS.bug).map(function (b) {
+      return [b[0], fieldsHtml(it, b[1])];
+    });
+    var rest = fieldsHtml(it, extra);
+    $("d-body").innerHTML =
+      '<h2 id="d-title">' + esc(it.title) + "</h2>" +
+      '<div class="d-badges">' + [kindBadge(it.kind), sevBadge(it.sev),
+        it.area ? '<span class="badge b-outline">' + esc(it.area) + "</span>" : ""].join("") + "</div>" +
+      (facts.length ? '<div class="facts">' + facts.map(function (f) {
+        return "<div><span>" + esc(f[0]) + "</span><b>" + (f[2] ? f[1] : esc(f[1])) + "</b></div>";
+      }).join("") + "</div>" : "") +
+      blocks.map(function (b) { return b[1] ? '<h3 class="block-title">' + b[0] + "</h3>" + b[1] : ""; }).join("") +
+      (rest ? '<h3 class="block-title">기타</h3>' + rest : "") +
+      (!blocks.some(function (b) { return b[1]; }) && !rest ? '<p class="held-note">제목 말고는 적힌 내용이 없습니다.</p>' : "");
+    var pos = visible.indexOf(it);
+    $("d-prev").disabled = pos <= 0;
+    $("d-next").disabled = pos < 0 || pos >= visible.length - 1;
+    $("d-body").scrollTop = 0;
+  }
+
+  function renderHeld() {
+    var held = data.held;
+    var rows = held && held.rows ? held.rows : [];
+    $("tabs").hidden = !rows.length;
+    $("tab-issues-n").textContent = issues.length;
+    $("tab-held-n").textContent = rows.length;
+    if (!rows.length) { state.tab = "issues"; }
+    $("tab-issues").setAttribute("aria-selected", String(state.tab === "issues"));
+    $("tab-held").setAttribute("aria-selected", String(state.tab === "held"));
+    $("view-issues").hidden = state.tab !== "issues";
+    $("view-held").hidden = state.tab !== "held";
+    if (!rows.length) return;
+    var fields = held.fields || [];
+    $("held").innerHTML = "<thead><tr>" + fields.map(function (f) { return "<th>" + esc(f) + "</th>"; }).join("") +
+      "</tr></thead><tbody>" + rows.map(function (r) {
+        return "<tr>" + fields.map(function (f) { return "<td>" + esc(str(r[f])) + "</td>"; }).join("") + "</tr>";
+      }).join("") + "</tbody>";
+  }
+
+  function renderHead() {
+    var name = data.project || "이슈";
+    $("project").textContent = name + " 이슈 로그";
+    var bits = [];
+    if (data.repo) bits.push('<a href="https://github.com/' + esc(data.repo) + '" target="_blank" rel="noopener">' + esc(data.repo) + "</a>");
+    if (data.tracker) bits.push("트래커 " + esc(data.tracker === "linear" ? "Linear" : data.tracker === "github" ? "GitHub Issues" : data.tracker));
+    if (data.updated_at) bits.push("갱신 " + esc(str(data.updated_at).replace("T", " ").slice(0, 16)));
+    $("meta").innerHTML = bits.join(" · ");
+    $("foot").textContent = "읽기 전용 화면입니다. 이슈는 issuelog 도구가 트래커와 issue_log.json 에 " +
+      "함께 기록하고, 상태는 트래커에서 바꾸면 주간 동기화가 가져옵니다. 이 파일은 저장할 때마다 다시 만들어집니다.";
+  }
+
+  function renderAll() {
+    renderHead();
+    renderHeld();
+    renderStatus();
+    renderFilters();
+    renderList();
+    renderDrawer();
+    $("q").value = state.q;
+    $("sort").value = state.sort;
+  }
+
+  // -- 이벤트 --------------------------------------------------------------
+  function update() {
+    if (typing) {
+      clearTimeout(typing);
+      typing = null;
+      state.q = $("q").value.trim();
+    }
+    writeHash();
+    renderAll();
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    var b;
+    if ((b = t.closest("[data-status]"))) {
+      state.status = b.getAttribute("data-status");
+      update();
+      refocus("data-status", state.status);
+      return;
+    }
+    if ((b = t.closest(".chip"))) {
+      var g = b.getAttribute("data-group"), v = b.getAttribute("data-value");
+      var arr = state[g], at = arr.indexOf(v);
+      if (at >= 0) arr.splice(at, 1); else arr.push(v);
+      update();
+      refocus("data-group", g, "data-value", v);
+      return;
+    }
+    if (t.closest("#reset") || t.closest("#empty-reset")) {
+      clearTimeout(typing);
+      typing = null;
+      state.kind = []; state.sev = []; state.area = []; state.q = "";
+      if (t.closest("#empty-reset")) state.status = "all";
+      update();
+      $("q").focus();
+      return;
+    }
+    if (t.closest(".row a")) return;
+    if ((b = t.closest(".row"))) { openIssue(+b.getAttribute("data-i")); return; }
+    if (t.closest("#d-close") || t === $("scrim")) { closeDrawer(); return; }
+    if (t.closest("#d-prev")) { step(-1); return; }
+    if (t.closest("#d-next")) { step(1); return; }
+    if (t.closest("#tab-issues")) { state.tab = "issues"; update(); return; }
+    if (t.closest("#tab-held")) { state.tab = "held"; update(); return; }
+  });
+
+  // 선택자 문자열을 조립하지 않고 속성 값을 직접 비교한다. 값에 줄바꿈이나 따옴표가 있어도 된다.
+  function refocus(a1, v1, a2, v2) {
+    var all = document.querySelectorAll("[" + a1 + "]");
+    for (var k = 0; k < all.length; k++) {
+      var el = all[k];
+      if (el.getAttribute(a1) === v1 && (!a2 || el.getAttribute(a2) === v2)) { el.focus(); return; }
+    }
+  }
+
+  // 상세 패널을 열면 포커스를 패널로 옮기고, 닫으면 그 이슈의 제목으로 돌려준다.
+  function openIssue(i) {
+    state.open = i;
+    update();
+    $("d-close").focus();
+  }
+  function closeDrawer() {
+    var i = state.open;
+    state.open = null;
+    update();
+    var back = document.querySelector('.title-btn[data-i="' + i + '"]');
+    if (back) back.focus();
+  }
+  function step(d) {
+    var pos = visible.indexOf(issues[state.open]);
+    var next = visible[pos + d];
+    if (next) { state.open = next.i; update(); }
+    if (document.activeElement && document.activeElement.disabled) $("d-close").focus();
+    else if (!$("drawer").contains(document.activeElement)) $("d-close").focus();
+  }
+
+  $("q").addEventListener("input", function (e) {
+    clearTimeout(typing);
+    var v = e.target.value;
+    typing = setTimeout(function () {
+      typing = null;
+      state.q = v.trim();
+      writeHash();
+      renderStatus(); renderFilters(); renderList();
+    }, 120);
+  });
+  $("sort").addEventListener("change", function (e) { state.sort = e.target.value; update(); });
+
+  document.addEventListener("keydown", function (e) {
+    var inField = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName);
+    if (e.key === "/" && !inField && state.open === null) { e.preventDefault(); $("q").focus(); return; }
+    if (e.key === "Escape") {
+      if (state.open !== null) { closeDrawer(); return; }
+      if (document.activeElement === $("q") && $("q").value) {
+        clearTimeout(typing);
+        $("q").value = ""; state.q = ""; update();
+      }
+      return;
+    }
+    if (e.key === "Tab" && state.open !== null) {
+      // 패널이 열린 동안 Tab 이 뒤의 목록으로 빠지지 않게 패널 안에서 돈다.
+      var f = Array.prototype.filter.call(
+        $("drawer").querySelectorAll("a[href], button:not([disabled])"),
+        function (el) { return el.offsetParent !== null; });
+      if (f.length) {
+        var first = f[0], last = f[f.length - 1];
+        if (!$("drawer").contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      return;
+    }
+    if (state.open !== null && !inField) {
+      if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); step(1); }
+      if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); step(-1); }
+    }
+  });
+  window.addEventListener("hashchange", function () { clearTimeout(typing); readHash(); renderAll(); });
+
+  // -- 테마 ----------------------------------------------------------------
+  var root = document.documentElement;
+  try {
+    var saved = localStorage.getItem("issuelog-theme");
+    if (saved === "light" || saved === "dark") root.setAttribute("data-theme", saved);
+  } catch (e) { /* 저장소가 막혀 있으면 시스템 설정을 따른다 */ }
+  $("theme").addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme")
+      ? root.getAttribute("data-theme") === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("issuelog-theme", next); } catch (e) { /* 무시 */ }
+  });
+
+  // -- 시작 ----------------------------------------------------------------
+  readHash();
+  renderAll();
+
+  // 웹 서버로 열었으면 옆의 JSON 이 더 새것일 수 있다. file:// 에서는 브라우저가 막는다.
+  if (/^https?:$/.test(location.protocol)) {
+    var jsonName = (location.pathname.split("/").pop() || "issue_log.html").replace(/\.html?$/i, ".json");
+    fetch(jsonName, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (d && d.issues && d.updated_at !== data.updated_at) { load(d); readHash(); renderAll(); }
+    }).catch(function () { /* 내장 데이터로 계속 */ });
+  }
+})();
+</script>
+</body>
+</html>
